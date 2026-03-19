@@ -10,6 +10,10 @@ import (
 type DecodeStrategy func(data io.ReadCloser, v interface{}) error
 
 var (
+	NoDecodeStrategy DecodeStrategy = func(data io.ReadCloser, v interface{}) error {
+		return nil
+	}
+
 	JSONDecodeStrategy DecodeStrategy = func(data io.ReadCloser, v interface{}) error {
 		return json.NewDecoder(data).Decode(v)
 	}
