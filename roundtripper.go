@@ -64,7 +64,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	// 3. if 401 or 404 (GitLab) -> refresh token and retry once
+	// 3. if 401 or 404 (GitLab) -> refresh token and retry once as some APIs return 404 for expired tokens
 	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotFound) && t.client.tokenProvider != nil {
 		logrus.WithFields(logrus.Fields{
 			"method": req.Method,

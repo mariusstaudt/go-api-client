@@ -1,4 +1,4 @@
-module gitlab.devops.telekom.de/marius.staudt/go-api-client
+module github.com/mariusstaudt/go-api-client
 
 go 1.25.3
 
