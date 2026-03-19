@@ -1,30 +1,30 @@
 # go-api-client
 
-Ein flexibler, konfigurierbarer HTTP-API-Client für Go mit eingebauter Middleware-Chain für Caching, Authentifizierung, Retry-Logik und mehr.
+A flexible, configurable HTTP API client for Go with a built-in middleware chain for caching, authentication, retry logic, and more.
 
 ## Features
 
-- **Functional Options Pattern** - Saubere, erweiterbare Konfiguration
-- **Middleware-Chain** - Modulare HTTP-Transport-Layer
-- **Caching** - Intelligentes Response-Caching mit Singleflight-Deduplizierung
-- **Authentifizierung** - Mehrere Auth-Strategien mit automatischem Token-Refresh
-- **Retry-Logik** - Automatische Wiederholungen bei Server-Fehlern
-- **Flexible Dekodierung** - JSON, YAML oder Raw-Bytes
+- **Functional Options Pattern** – Clean, extensible configuration
+- **Middleware Chain** – Modular HTTP transport layers
+- **Caching** – Response caching with singleflight deduplication
+- **Authentication** – Multiple auth strategies with automatic token refresh
+- **Retry Logic** – Automatic retries on server errors
+- **Flexible Decoding** – JSON, YAML, or raw bytes
 
 ## Installation
 
 ```bash
-go get gitlab.devops.telekom.de/marius.staudt/go-api-client
+go get github.com/mariusstaudt/go-api-client
 ```
 
-## Schnellstart
+## Quick Start
 
 ```go
 package main
 
 import (
     "fmt"
-    api "gitlab.devops.telekom.de/marius.staudt/go-api-client"
+    api "github.com/mariusstaudt/go-api-client"
 )
 
 func main() {
@@ -43,23 +43,23 @@ func main() {
 }
 ```
 
-## Konfiguration
+## Configuration
 
 ### Client Options
 
-| Option | Beschreibung |
+| Option | Description |
 |--------|-------------|
-| `WithBaseURL(url)` | Setzt die Basis-URL für alle Requests |
-| `WithTokenProvider(p)` | Setzt den Token-Provider für dynamische Tokens |
-| `WithAuthStrategy(s)` | Definiert wie der Token im Request gesetzt wird |
-| `WithDefaultHeaders(h)` | Fügt Standard-Header zu allen Requests hinzu |
-| `WithTransport(t)` | Überschreibt den Standard-HTTP-Transport |
-| `WithContext(ctx)` | Setzt den Standard-Context für Requests |
-| `WithDecodeStrategy(d)` | Definiert wie Responses dekodiert werden |
+| `WithBaseURL(url)` | Sets the base URL for all requests |
+| `WithTokenProvider(p)` | Sets the token provider for dynamic tokens |
+| `WithAuthStrategy(s)` | Defines how the token is applied to requests |
+| `WithDefaultHeaders(h)` | Adds default headers to all requests |
+| `WithTransport(t)` | Overrides the default HTTP transport |
+| `WithContext(ctx)` | Sets the default context for requests |
+| `WithDecodeStrategy(d)` | Defines how responses are decoded |
 
-### Authentifizierung
+### Authentication
 
-#### Auth-Strategien
+#### Auth Strategies
 
 ```go
 // Bearer Token (Authorization: Bearer <token>)
@@ -71,21 +71,21 @@ api.BasicStrategy
 // GitLab Private Token (PRIVATE-TOKEN: <token>)
 api.GitLabStrategy
 
-// Keine Authentifizierung
+// No authentication
 api.NoAuthStrategy
 ```
 
 #### Token Provider
 
-Der Token Provider ermöglicht dynamisches Token-Management:
+The token provider enables dynamic token management:
 
 ```go
-// Statischer Token
+// Static token
 api.StaticTokenProvider("my-static-token")
 
-// Dynamischer Token (z.B. OAuth)
+// Dynamic token (e.g. OAuth)
 func myTokenProvider(ctx context.Context) (string, error) {
-    // Token von OAuth-Server holen, aus Vault laden, etc.
+    // Fetch token from an OAuth server, load from Vault, etc.
     return fetchTokenFromSomewhere()
 }
 
@@ -95,12 +95,12 @@ client := api.NewClient("my-api",
 )
 ```
 
-**Automatischer Token-Refresh:** Bei `401 Unauthorized` oder `404 Not Found` (GitLab-Spezifikum) wird automatisch der Token-Provider aufgerufen und der Request wiederholt.
+**Automatic Token Refresh:** On `401 Unauthorized` or `404 Not Found` (GitLab-specific behavior), the token provider is automatically called and the request is retried.
 
-### Decode-Strategien
+### Decode Strategies
 
 ```go
-// JSON (Standard)
+// JSON (default)
 api.JSONDecodeStrategy
 
 // YAML
@@ -110,7 +110,7 @@ api.YamlDecodeStrategy
 api.ByteDecodeStrategy
 ```
 
-**Beispiel mit Bytes:**
+**Example with Bytes:**
 
 ```go
 client := api.NewClient("file-api",
@@ -122,9 +122,9 @@ var data []byte
 client.Get("/document.pdf", &data)
 ```
 
-## Middleware-Chain
+## Middleware Chain
 
-Der Client verwendet eine verkettete Transport-Architektur:
+The client uses a chained transport architecture:
 
 ```
 Request → Cache → Auth → Headers → Retry → HTTP Transport → Server
@@ -132,48 +132,48 @@ Request → Cache → Auth → Headers → Retry → HTTP Transport → Server
 
 ### 1. Cache Transport
 
-- Cached nur `GET`-Requests
-- Standard-TTL: 1 Minute
-- Cached nur `200 OK` Responses
-- Verwendet Singleflight zur Deduplizierung paralleler identischer Requests
-- Cache-Key basiert auf: Method + URL + Accept-Header
+- Only caches `GET` requests
+- Default TTL: 1 minute
+- Only caches `200 OK` responses
+- Uses singleflight to deduplicate concurrent identical requests
+- Cache key is based on: Method + URL + Accept header
 
 ### 2. Auth Transport
 
-- Setzt Auth-Header basierend auf der gewählten Strategie
-- Automatischer Token-Refresh bei 401/404
-- Request-Body wird für Retry gespeichert
+- Sets the auth header based on the chosen strategy
+- Automatic token refresh on 401/404
+- Request body is preserved for retries
 
 ### 3. Header Transport
 
-- Fügt konfigurierte Default-Headers hinzu
-- Unterstützt Host-Header-Überschreibung
+- Applies configured default headers
+- Supports Host header override
 
 ### 4. Retry Transport
 
-- Max. 2 Wiederholungen bei Server-Fehlern (5xx)
-- Exponentielles Backoff (500ms, 1000ms, ...)
-- Kein Retry bei Client-Fehlern (4xx)
+- Up to 2 retries on server errors (5xx)
+- Exponential backoff (500ms, 1000ms, …)
+- No retries on client errors (4xx)
 
 ## API
 
-### Methoden
+### Methods
 
 ```go
-// Generische Request-Methode
+// Generic request method
 func (c *Client) Do(method, path string, body any, target any) error
 
-// GET Request
+// GET request
 func (c *Client) Get(path string, target any) error
 
-// POST Request
+// POST request
 func (c *Client) Post(path string, body any, target any) error
 ```
 
-### Beispiele
+### Examples
 
 ```go
-// GET mit Struct
+// GET with struct
 type User struct {
     ID   int    `json:"id"`
     Name string `json:"name"`
@@ -182,12 +182,12 @@ type User struct {
 var user User
 client.Get("/users/123", &user)
 
-// POST mit Body
-newUser := User{Name: "Max Mustermann"}
+// POST with body
+newUser := User{Name: "Jane Doe"}
 var created User
 client.Post("/users", newUser, &created)
 
-// GET ohne Response-Body
+// GET without response body
 client.Get("/health", nil)
 ```
 
@@ -199,27 +199,27 @@ client := api.NewClient("my-api",
     api.WithDefaultHeaders(map[string]string{
         "X-Custom-Header": "value",
         "Accept":          "application/json",
-        "Host":            "custom-host.example.com", // Host-Header wird speziell behandelt
+        "Host":            "custom-host.example.com", // Host header receives special handling
     }),
 )
 ```
 
 ## Logging
 
-Der Client verwendet [logrus](https://github.com/sirupsen/logrus) für strukturiertes Logging:
+The client uses [logrus](https://github.com/sirupsen/logrus) for structured logging:
 
-- **Debug:** Request-Vorbereitung, Cache-Hits/Misses, Header-Anwendung
-- **Info:** Token-Refresh, Retries, Request-Completion
-- **Error:** Fehlgeschlagene Requests
+- **Debug:** Request preparation, cache hits/misses, header application
+- **Info:** Token refresh, retries, request completion
+- **Error:** Failed requests
 
 ```go
 import "github.com/sirupsen/logrus"
 
-// Debug-Logging aktivieren
+// Enable debug logging
 logrus.SetLevel(logrus.DebugLevel)
 ```
 
-## Architektur
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -243,8 +243,8 @@ logrus.SetLevel(logrus.DebugLevel)
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Abhängigkeiten
+## Dependencies
 
-- [github.com/goccy/go-yaml](https://github.com/goccy/go-yaml) - YAML-Dekodierung
-- [github.com/sirupsen/logrus](https://github.com/sirupsen/logrus) - Strukturiertes Logging
-- [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) - Singleflight für Cache-Deduplizierung
+- [github.com/goccy/go-yaml](https://github.com/goccy/go-yaml) – YAML decoding
+- [github.com/sirupsen/logrus](https://github.com/sirupsen/logrus) – Structured logging
+- [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) – Singleflight for cache deduplication
