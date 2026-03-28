@@ -21,6 +21,7 @@ type Client struct {
 	defaultHeaders map[string]string
 	transport      *http.Transport
 	decoder        DecodeStrategy
+	cacheTTL       time.Duration
 }
 
 type cachedResponse struct {

@@ -23,6 +23,10 @@ func NewClient(name string, options ...ClientOption) *Client {
 		c.ctx = context.Background()
 	}
 
+	if c.cacheTTL == 0 {
+		c.cacheTTL = time.Minute
+	}
+
 	var internalTransport http.RoundTripper = c.transport
 	if c.transport == nil {
 		internalTransport = http.DefaultTransport
@@ -45,7 +49,7 @@ func NewClient(name string, options ...ClientOption) *Client {
 
 	internalTransport = &cacheTransport{
 		next:  internalTransport,
-		TTL:   time.Minute,
+		TTL:   c.cacheTTL,
 		cache: make(map[string]cachedResponse),
 	}
 

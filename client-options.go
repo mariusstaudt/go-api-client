@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 type ClientOption func(*Client)
@@ -33,4 +34,8 @@ func WithContext(ctx context.Context) ClientOption {
 
 func WithDecodeStrategy(decoder DecodeStrategy) ClientOption {
 	return func(c *Client) { c.decoder = decoder }
+}
+
+func WithCacheTTL(ttl time.Duration) ClientOption {
+	return func(c *Client) { c.cacheTTL = ttl }
 }
