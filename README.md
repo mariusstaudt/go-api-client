@@ -56,6 +56,8 @@ func main() {
 | `WithTransport(t)` | Overrides the default HTTP transport |
 | `WithContext(ctx)` | Sets the default context for requests |
 | `WithDecodeStrategy(d)` | Defines how responses are decoded |
+| `WithCacheTTL(ttl)` | Sets the response cache TTL (default: 1 minute) |
+| `WithValidator(v)` | Validates decoded responses with go-playground/validator |
 | `WithLogger(l)` | Sets the `*slog.Logger` used by the client (default: `slog.Default()`) |
 
 ### Authentication
@@ -122,6 +124,54 @@ client := api.NewClient("file-api",
 var data []byte
 client.Get("/document.pdf", &data)
 ```
+
+### Response Validation
+
+Pass a [go-playground/validator](https://github.com/go-playground/validator)
+instance with `WithValidator` and every decoded response is checked against the
+`validate` tags of your target type. A failing response turns into an error
+instead of a half-populated struct:
+
+```go
+type User struct {
+    ID    int    `json:"id"    validate:"required"`
+    Name  string `json:"name"  validate:"required"`
+    Email string `json:"email" validate:"omitempty,email"`
+}
+
+client := api.NewClient("my-api",
+    api.WithBaseURL("https://api.example.com"),
+    api.WithValidator(validator.New(validator.WithRequiredStructEnabled())),
+)
+
+var user User
+if err := client.Get("/users/1", &user); err != nil {
+    // "response validation failed: Key: 'User.Email' Error:Field validation ..."
+}
+```
+
+Validation runs after decoding and before `Do` returns. The underlying
+`validator.ValidationErrors` stays reachable through the wrapped error:
+
+```go
+var verrs validator.ValidationErrors
+if errors.As(err, &verrs) {
+    for _, fe := range verrs {
+        fmt.Println(fe.Namespace(), fe.Tag())
+    }
+}
+```
+
+**What gets validated:**
+
+| Target | Behavior |
+|--------|----------|
+| `*Struct` | Validated, including nested structs |
+| `*[]Struct`, `*[]*Struct` | Every element validated; the error names the failing `index N` |
+| `*map[string]any`, `*[]byte`, primitives | Skipped – no `validate` tags to apply (logged at debug level) |
+| `nil` target | Skipped |
+
+Without `WithValidator` no validation happens at all, so this is fully opt-in.
 
 ## Middleware Chain
 
@@ -275,6 +325,7 @@ api.WithLogger(slog.New(slog.DiscardHandler))
 ## Dependencies
 
 - [github.com/goccy/go-yaml](https://github.com/goccy/go-yaml) – YAML decoding
+- [github.com/go-playground/validator](https://github.com/go-playground/validator) – Optional response validation
 - [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) – Singleflight for cache deduplication
 
 Logging uses the standard library (`log/slog`) – no external dependency.

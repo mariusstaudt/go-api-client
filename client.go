@@ -149,6 +149,13 @@ func (c *Client) Do(method, path string, body any, target any) error {
 		if err := c.decoder(resp.Body, target); err != nil {
 			return fmt.Errorf("decode error: %w", err)
 		}
+
+		if err := c.validateTarget(target); err != nil {
+			c.logger.WarnContext(c.ctx, "response validation failed", append(reqAttrs(req),
+				slog.Any("error", err),
+			)...)
+			return fmt.Errorf("response validation failed: %w", err)
+		}
 	}
 
 	c.logger.InfoContext(c.ctx, "request completed", append(reqAttrs(req),
