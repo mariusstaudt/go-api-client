@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -22,6 +23,7 @@ type Client struct {
 	transport      *http.Transport
 	decoder        DecodeStrategy
 	cacheTTL       time.Duration
+	validator      *validator.Validate
 }
 
 type cachedResponse struct {

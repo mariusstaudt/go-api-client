@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type ClientOption func(*Client)
@@ -38,4 +40,8 @@ func WithDecodeStrategy(decoder DecodeStrategy) ClientOption {
 
 func WithCacheTTL(ttl time.Duration) ClientOption {
 	return func(c *Client) { c.cacheTTL = ttl }
+}
+
+func WithValidator(v *validator.Validate) ClientOption {
+	return func(c *Client) { c.validator = v }
 }
