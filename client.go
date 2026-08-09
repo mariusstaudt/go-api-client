@@ -131,10 +131,11 @@ func (c *Client) Do(method, path string, body any, target any) error {
 			append(reqAttrs(req), slog.Int("status", resp.StatusCode))...,
 		)
 
-		// log out the body of the response
+		// Log the body at debug level only: error bodies routinely carry tokens
+		// or personal data, which should not end up in default-level logs.
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err == nil {
-			c.logger.InfoContext(c.ctx, "response body", slog.String("body", string(bodyBytes)))
+			c.logger.DebugContext(c.ctx, "error response body", slog.String("body", string(bodyBytes)))
 			// Restore the body so it can be read again if needed
 			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		} else {
