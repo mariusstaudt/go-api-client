@@ -30,7 +30,7 @@ import (
 func main() {
     client := api.NewClient("my-api",
         api.WithBaseURL("https://api.example.com"),
-        api.WithTokenProvider(api.StaticTokenProvider("my-token")),
+        api.WithTokenProvider(api.NewStaticTokenProvider("my-token")),
         api.WithAuthStrategy(api.BearerStrategy),
     )
 
@@ -82,7 +82,7 @@ The token provider enables dynamic token management:
 
 ```go
 // Static token
-api.StaticTokenProvider("my-static-token")
+api.NewStaticTokenProvider("my-static-token")
 
 // Dynamic token (e.g. OAuth)
 func myTokenProvider(ctx context.Context) (string, error) {
@@ -209,10 +209,14 @@ client := api.NewClient("my-api",
 
 The client uses the standard library's [`log/slog`](https://pkg.go.dev/log/slog) for structured logging:
 
-- **Debug:** Request preparation, cache hits/misses, header application
-- **Info:** Token refresh, retries, request completion
+- **Debug:** Request preparation, cache hits/misses, header application, error response bodies
+- **Info:** Token refresh, retries, request completion, error status codes
 - **Warn:** Unreadable response bodies
 - **Error:** Failed requests
+
+> Response bodies of failed requests (status ≥ 400) are logged at **debug** level
+> only, since they routinely contain tokens or personal data. Enable debug
+> logging deliberately, and prefer a handler that redacts sensitive attributes.
 
 By default the client logs to `slog.Default()`. Pass your own logger with
 `WithLogger` to control the format, level, and destination without touching
