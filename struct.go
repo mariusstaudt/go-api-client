@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type Client struct {
 	decoder        DecodeStrategy
 	cacheTTL       time.Duration
 	validator      *validator.Validate
+	logger         *slog.Logger
 }
 
 type cachedResponse struct {
@@ -34,7 +36,8 @@ type cachedResponse struct {
 }
 
 type cacheTransport struct {
-	next http.RoundTripper
+	next   http.RoundTripper
+	logger *slog.Logger
 
 	mu    sync.RWMutex
 	group singleflight.Group
@@ -45,17 +48,20 @@ type cacheTransport struct {
 
 type headerTransport struct {
 	next           http.RoundTripper
+	logger         *slog.Logger
 	defaultHeaders map[string]string
 }
 
 type authTransport struct {
 	client *Client
 	next   http.RoundTripper
+	logger *slog.Logger
 }
 
 type retryTransport struct {
 	maxRetries int
 	next       http.RoundTripper
+	logger     *slog.Logger
 }
 
 func respStatus(resp *http.Response) int {
@@ -63,4 +69,12 @@ func respStatus(resp *http.Response) int {
 		return 0
 	}
 	return resp.StatusCode
+}
+
+// reqAttrs returns the attributes shared by every request-scoped log record.
+func reqAttrs(req *http.Request) []any {
+	return []any{
+		slog.String("method", req.Method),
+		slog.String("url", req.URL.String()),
+	}
 }

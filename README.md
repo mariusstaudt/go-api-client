@@ -56,6 +56,7 @@ func main() {
 | `WithTransport(t)` | Overrides the default HTTP transport |
 | `WithContext(ctx)` | Sets the default context for requests |
 | `WithDecodeStrategy(d)` | Defines how responses are decoded |
+| `WithLogger(l)` | Sets the `*slog.Logger` used by the client (default: `slog.Default()`) |
 
 ### Authentication
 
@@ -206,17 +207,41 @@ client := api.NewClient("my-api",
 
 ## Logging
 
-The client uses [logrus](https://github.com/sirupsen/logrus) for structured logging:
+The client uses the standard library's [`log/slog`](https://pkg.go.dev/log/slog) for structured logging:
 
 - **Debug:** Request preparation, cache hits/misses, header application
 - **Info:** Token refresh, retries, request completion
+- **Warn:** Unreadable response bodies
 - **Error:** Failed requests
 
-```go
-import "github.com/sirupsen/logrus"
+By default the client logs to `slog.Default()`. Pass your own logger with
+`WithLogger` to control the format, level, and destination without touching
+global state:
 
-// Enable debug logging
-logrus.SetLevel(logrus.DebugLevel)
+```go
+import (
+    "log/slog"
+    "os"
+)
+
+logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelDebug,
+}))
+
+client := api.NewClient("my-api",
+    api.WithBaseURL("https://api.example.com"),
+    api.WithLogger(logger),
+)
+```
+
+Every record is tagged with the client name (`client=my-api`), and all log calls
+are context-aware (`InfoContext`, `DebugContext`, …), so a handler can pick up
+trace IDs or other values from the request context.
+
+To silence the client entirely:
+
+```go
+api.WithLogger(slog.New(slog.DiscardHandler))
 ```
 
 ## Architecture
@@ -246,5 +271,6 @@ logrus.SetLevel(logrus.DebugLevel)
 ## Dependencies
 
 - [github.com/goccy/go-yaml](https://github.com/goccy/go-yaml) – YAML decoding
-- [github.com/sirupsen/logrus](https://github.com/sirupsen/logrus) – Structured logging
 - [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) – Singleflight for cache deduplication
+
+Logging uses the standard library (`log/slog`) – no external dependency.

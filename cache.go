@@ -5,19 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 func (t *cacheTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Only cache GET
 	if req.Method != http.MethodGet {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Debug("skipping cache for non-GET request")
+		t.logger.DebugContext(req.Context(), "skipping cache for non-GET request", reqAttrs(req)...)
 		return t.Next().RoundTrip(req)
 	}
 
@@ -29,20 +25,14 @@ func (t *cacheTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if e, ok := t.cache[key]; ok && now.Before(e.exp) {
 		t.mu.RUnlock()
 
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Debug("cache hit")
+		t.logger.DebugContext(req.Context(), "cache hit", reqAttrs(req)...)
 
 		return responseFromEntry(req, e), nil
 	}
 	t.mu.RUnlock()
 
 	// Dedupe concurrent identical requests
-	logrus.WithFields(logrus.Fields{
-		"method": req.Method,
-		"url":    req.URL.String(),
-	}).Debug("cache miss, fetching from upstream")
+	t.logger.DebugContext(req.Context(), "cache miss, fetching from upstream", reqAttrs(req)...)
 
 	v, err, _ := t.group.Do(key, func() (any, error) {
 		// Re-check inside singleflight
@@ -50,10 +40,7 @@ func (t *cacheTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		t.mu.RLock()
 		if e, ok := t.cache[key]; ok && now2.Before(e.exp) {
 			t.mu.RUnlock()
-			logrus.WithFields(logrus.Fields{
-				"method": req.Method,
-				"url":    req.URL.String(),
-			}).Debug("cache hit inside singleflight")
+			t.logger.DebugContext(req.Context(), "cache hit inside singleflight", reqAttrs(req)...)
 			return e, nil
 		}
 		t.mu.RUnlock()
@@ -86,28 +73,22 @@ func (t *cacheTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			t.cache[key] = cRes
 			t.mu.Unlock()
 
-			logrus.WithFields(logrus.Fields{
-				"method":   req.Method,
-				"url":      req.URL.String(),
-				"ttl":      t.TTL.String(),
-				"bodySize": len(body),
-			}).Debug("response cached")
+			t.logger.DebugContext(req.Context(), "response cached", append(reqAttrs(req),
+				slog.Duration("ttl", t.TTL),
+				slog.Int("bodySize", len(body)),
+			)...)
 		} else {
-			logrus.WithFields(logrus.Fields{
-				"method": req.Method,
-				"url":    req.URL.String(),
-				"status": resp.StatusCode,
-			}).Debug("response not cached due to status code")
+			t.logger.DebugContext(req.Context(), "response not cached due to status code",
+				append(reqAttrs(req), slog.Int("status", resp.StatusCode))...,
+			)
 		}
 
 		return cRes, nil
 	})
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-			"error":  err.Error(),
-		}).Error("cache transport request failed")
+		t.logger.ErrorContext(req.Context(), "cache transport request failed",
+			append(reqAttrs(req), slog.Any("error", err))...,
+		)
 		return nil, err
 	}
 

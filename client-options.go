@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -44,4 +45,11 @@ func WithCacheTTL(ttl time.Duration) ClientOption {
 
 func WithValidator(v *validator.Validate) ClientOption {
 	return func(c *Client) { c.validator = v }
+}
+
+// WithLogger sets the logger used by the client and its transport chain.
+// Defaults to slog.Default(). Pass slog.New(slog.DiscardHandler) to silence
+// the client entirely.
+func WithLogger(l *slog.Logger) ClientOption {
+	return func(c *Client) { c.logger = l }
 }

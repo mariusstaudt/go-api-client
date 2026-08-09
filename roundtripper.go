@@ -3,17 +3,13 @@ package api
 import (
 	"bytes"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	logrus.WithFields(logrus.Fields{
-		"method": req.Method,
-		"url":    req.URL.String(),
-	}).Debug("applying default headers")
+	t.logger.DebugContext(req.Context(), "applying default headers", reqAttrs(req)...)
 
 	for key, value := range t.defaultHeaders {
 		req.Header.Set(key, value)
@@ -46,16 +42,10 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// 1. set auth header
 	if token != "" && strategy != nil {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Debug("applying auth strategy")
+		t.logger.DebugContext(req.Context(), "applying auth strategy", reqAttrs(req)...)
 		strategy(req, token)
 	} else {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Debug("skipping auth header (missing token or strategy)")
+		t.logger.DebugContext(req.Context(), "skipping auth header (missing token or strategy)", reqAttrs(req)...)
 	}
 
 	// 2. execute request
@@ -66,10 +56,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// 3. if 401 or 404 (GitLab) -> refresh token and retry once as some APIs return 404 for expired tokens
 	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotFound) && t.client.tokenProvider != nil {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Info("unauthorized, attempting token refresh")
+		t.logger.InfoContext(req.Context(), "unauthorized, attempting token refresh", reqAttrs(req)...)
 		resp.Body.Close() // close old response body
 
 		err := t.client.refreshToken(req)
@@ -77,10 +64,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-		}).Info("retrying request with refreshed token")
+		t.logger.InfoContext(req.Context(), "retrying request with refreshed token", reqAttrs(req)...)
 
 		// clone request and resend with new token
 		newReq := req.Clone(req.Context())
@@ -101,11 +85,9 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 
 	for i := 0; i <= t.maxRetries; i++ {
-		logrus.WithFields(logrus.Fields{
-			"attempt": i + 1,
-			"method":  req.Method,
-			"url":     req.URL.String(),
-		}).Debug("issuing request")
+		t.logger.DebugContext(req.Context(), "issuing request",
+			append(reqAttrs(req), slog.Int("attempt", i+1))...,
+		)
 
 		resp, err = t.next.RoundTrip(req)
 
@@ -115,13 +97,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		if i < t.maxRetries {
-			logrus.WithFields(logrus.Fields{
-				"attempt": i + 1,
-				"method":  req.Method,
-				"url":     req.URL.String(),
-				"err":     err,
-				"status":  respStatus(resp),
-			}).Info("retrying after failure")
+			t.logger.InfoContext(req.Context(), "retrying after failure", append(reqAttrs(req),
+				slog.Int("attempt", i+1),
+				slog.Int("status", respStatus(resp)),
+				slog.Any("error", err),
+			)...)
 			time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
 		}
 	}

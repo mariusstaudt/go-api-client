@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 func NewClient(name string, options ...ClientOption) *Client {
@@ -27,6 +26,11 @@ func NewClient(name string, options ...ClientOption) *Client {
 		c.cacheTTL = time.Minute
 	}
 
+	if c.logger == nil {
+		c.logger = slog.Default()
+	}
+	c.logger = c.logger.With(slog.String("client", c.name))
+
 	var internalTransport http.RoundTripper = c.transport
 	if c.transport == nil {
 		internalTransport = http.DefaultTransport
@@ -34,23 +38,27 @@ func NewClient(name string, options ...ClientOption) *Client {
 
 	internalTransport = &retryTransport{
 		next:       internalTransport,
+		logger:     c.logger,
 		maxRetries: 2,
 	}
 
 	internalTransport = &headerTransport{
 		next:           internalTransport,
+		logger:         c.logger,
 		defaultHeaders: c.defaultHeaders,
 	}
 
 	internalTransport = &authTransport{
 		client: c,
 		next:   internalTransport,
+		logger: c.logger,
 	}
 
 	internalTransport = &cacheTransport{
-		next:  internalTransport,
-		TTL:   c.cacheTTL,
-		cache: make(map[string]cachedResponse),
+		next:   internalTransport,
+		logger: c.logger,
+		TTL:    c.cacheTTL,
+		cache:  make(map[string]cachedResponse),
 	}
 
 	c.httpClient = &http.Client{
@@ -62,12 +70,11 @@ func NewClient(name string, options ...ClientOption) *Client {
 		c.decoder = JSONDecodeStrategy
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"name":             c.name,
-		"baseURL":          c.baseURL,
-		"hasTokenProvider": c.tokenProvider != nil,
-		"hasAuthStrategy":  c.authStrategy != nil,
-	}).Infof("api client initialized")
+	c.logger.InfoContext(c.ctx, "api client initialized",
+		slog.String("baseURL", c.baseURL),
+		slog.Bool("hasTokenProvider", c.tokenProvider != nil),
+		slog.Bool("hasAuthStrategy", c.authStrategy != nil),
+	)
 
 	return c
 }
@@ -90,11 +97,11 @@ func (c *Client) Do(method, path string, body any, target any) error {
 
 	url := c.baseURL + path
 
-	logrus.WithFields(logrus.Fields{
-		"method":  method,
-		"url":     url,
-		"hasBody": body != nil,
-	}).Debug("preparing request")
+	c.logger.DebugContext(c.ctx, "preparing request",
+		slog.String("method", method),
+		slog.String("url", url),
+		slog.Bool("hasBody", body != nil),
+	)
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -120,20 +127,18 @@ func (c *Client) Do(method, path string, body any, target any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		logrus.WithFields(logrus.Fields{
-			"method": req.Method,
-			"url":    req.URL.String(),
-			"status": resp.StatusCode,
-		}).Info("api returned error status")
+		c.logger.InfoContext(c.ctx, "api returned error status",
+			append(reqAttrs(req), slog.Int("status", resp.StatusCode))...,
+		)
 
 		// log out the body of the response
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err == nil {
-			logrus.WithField("body", string(bodyBytes)).Info("response body")
+			c.logger.InfoContext(c.ctx, "response body", slog.String("body", string(bodyBytes)))
 			// Restore the body so it can be read again if needed
 			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		} else {
-			logrus.WithError(err).Warn("failed to read response body")
+			c.logger.WarnContext(c.ctx, "failed to read response body", slog.Any("error", err))
 		}
 
 		return fmt.Errorf("api error [%d]: %s", resp.StatusCode, resp.Status)
@@ -145,13 +150,10 @@ func (c *Client) Do(method, path string, body any, target any) error {
 		}
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"method":   req.Method,
-		"url":      req.URL.String(),
-		"err":      err,
-		"status":   respStatus(resp),
-		"duration": time.Since(startTime),
-	}).Info("request completed")
+	c.logger.InfoContext(c.ctx, "request completed", append(reqAttrs(req),
+		slog.Int("status", respStatus(resp)),
+		slog.Duration("duration", time.Since(startTime)),
+	)...)
 
 	return nil
 }
